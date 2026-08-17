@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SHAP vs LIME — Evaluation Results</title>
+<style>
+  :root{
+    --bg: #ffffff;
+    --panel: #fafafa;
+    --border: #e2e2e2;
+    --text: #222222;
+    --text-dim: #6b6b6b;
+    --shap: #3b6ea5;
+    --lime: #c97a2b;
+    --ok: #2e7d4f;
+    --err: #b3261e;
+    --gemini: #6b3fa0;
+    --gpt: #0e8a6d;
+    --claude: #c1440e;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 32px 20px 60px;
+  }
+  .wrap{ max-width: 960px; margin: 0 auto; }
+
+  header{
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 18px;
+    margin-bottom: 24px;
+  }
+  h1{
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .sub{
+    color: var(--text-dim);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .loader{
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-bottom: 28px;
+    display:flex;
+    align-items:center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .loader-status{ font-size: 13px; color: var(--text-dim); }
+  .loader-status.good{ color: var(--ok); }
+  .btn{
+    font-size: 13px;
+    background: #ffffff;
+    border: 1px solid #b5b5b5;
+    color: var(--text);
+    padding: 7px 14px;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .btn:hover{ background: #f0f0f0; }
+  .btn.active{ background: var(--text); color: #fff; border-color: var(--text); }
+  input[type=file]{ display:none; }
+
+  .summary{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px,1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat{
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .stat .k{
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .stat .v{ font-size: 22px; font-weight: 700; }
+  .stat .v.shap{ color: var(--shap); }
+  .stat .v.lime{ color: var(--lime); }
+
+  .filters{
+    display:flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap;
+  }
+
+  .provider-group{ margin-bottom: 28px; }
+  .provider-heading{
+    display:flex; align-items:center; gap: 10px;
+    margin-bottom: 12px;
+  }
+  .provider-dot{ width:10px; height:10px; border-radius:50%; }
+  .provider-dot.gemini{ background: var(--gemini); }
+  .provider-dot.gpt{ background: var(--gpt); }
+  .provider-dot.claude{ background: var(--claude); }
+  .provider-heading h2{ font-size: 16px; font-weight:700; }
+  .provider-heading .model-tag{
+    font-size: 11px; color: var(--text-dim); background: var(--panel);
+    border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px;
+  }
+
+  .cards{ display:flex; flex-direction:column; gap: 16px; }
+  .empty{
+    font-size: 13px;
+    color: var(--text-dim);
+    padding: 30px;
+    text-align:center;
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+  }
+  .card{
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px 22px;
+  }
+  .card-top{
+    display:flex; justify-content:space-between; align-items:flex-start;
+    flex-wrap: wrap; gap: 12px; margin-bottom: 16px;
+  }
+  .persona-name{ font-size: 17px; font-weight: 700; }
+  .preferred-tag{
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-weight: 700;
+    border: 1px solid;
+  }
+  .preferred-tag.lime{ background: #fbf1e6; color: var(--lime); border-color: #e8c99a; }
+  .preferred-tag.shap{ background: #eaf1f8; color: var(--shap); border-color: #b9d2e8; }
+  .preferred-tag.none{ background: #f2f2f2; color: var(--text-dim); border-color: var(--border); }
+
+  .bars{ display:flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+  .bar-row{
+    display:grid; grid-template-columns: 50px 1fr 34px;
+    align-items:center; gap: 10px; font-size: 13px;
+  }
+  .bar-track{ height: 10px; background: #eeeeee; border-radius: 5px; overflow:hidden; }
+  .bar-fill{ height:100%; }
+  .bar-fill.shap{ background: var(--shap); }
+  .bar-fill.lime{ background: var(--lime); }
+  .bar-label{ color: var(--text-dim); }
+  .bar-score{ text-align:right; }
+
+  .reasons{ display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 600px){ .reasons{ grid-template-columns: 1fr; } }
+  .reason{
+    font-size: 13px; line-height: 1.5; color: var(--text);
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 5px; padding: 12px 14px;
+  }
+  .reason .rk{
+    font-size: 11px; color: var(--text-dim);
+    display:block; margin-bottom: 4px; font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  footer{
+    margin-top: 36px; padding-top: 16px; border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--text-dim);
+    display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>SHAP vs LIME — Evaluation Results</h1>
+    <p class="sub">Multi-agent persona evaluation across three LLM providers (Gemini 3.5 Flash, Claude Sonnet 5, and GPT-5.5). Three personas each — SOC Manager, Compliance Auditor, and CISO — rated SHAP and LIME for clarity and usefulness, using identical prompts across providers.</p>
+  </header>
+
+  <div class="loader">
+    <div class="loader-status good" id="loaderStatus">Showing embedded results. Paste a new run below to update this page.</div>
+    <div>
+      <button class="btn" id="pickBtn">Load new .txt file…</button>
+      <input type="file" id="filePicker" accept=".txt">
+    </div>
+  </div>
+
+  <div class="summary" id="summary"></div>
+
+  <div class="filters" id="filters">
+    <button class="btn active" data-filter="all">All (9)</button>
+    <button class="btn" data-filter="Gemini">Gemini only</button>
+    <button class="btn" data-filter="Claude">Claude only</button>
+    <button class="btn" data-filter="GPT">GPT only</button>
+  </div>
+
+  <div id="groupedCards"></div>
+
+  <footer>
+    <span id="footSource">source: embedded run (Gemini 3.5 Flash + Claude Sonnet 5 + GPT-5.5)</span>
+    <span id="footTime"></span>
+  </footer>
+
+</div>
+
+<script>
+// -----------------------------------------------------------------------
+// EMBEDDED RESULTS — paste new runs here, or use "Load new .txt file…"
+// Each entry: provider, model, persona name, ratings, preference, reasons
+// -----------------------------------------------------------------------
+const EMBEDDED_RESULTS = [
+  {
+    provider: "Gemini", model: "gemini-3.5-flash",
+    name: "Security Operations Center (SOC) Manager",
+    shap: 4, lime: 8, preferred: "LIME",
+    reason1: "LIME provides alert-specific, local context with precise mathematical ranges (e.g., packet rates and flow durations), allowing analysts to immediately understand what anomalous threshold was crossed for this specific event rather than showing generic model behavior.",
+    reason2: "The conditional boundaries in LIME are highly actionable for rapid triage, as they can be directly translated into firewall rules, Snort signatures, or detection logic to quickly contain the threat."
+  },
+  {
+    provider: "Gemini", model: "gemini-3.5-flash",
+    name: "IT Compliance & Risk Auditor",
+    shap: 5, lime: 8, preferred: "LIME",
+    reason1: "LIME provides explicit, testable boundaries (e.g., specific ranges for flow duration and packet count) which allows verification of the model's decision against actual network log evidence for a robust audit trail.",
+    reason2: "LIME details the specific direction of influence (positive or negative contributions) for this specific alert, whereas the SHAP output only shows abstract global importances without explaining why this specific event was flagged."
+  },
+  {
+    provider: "Gemini", model: "gemini-3.5-flash",
+    name: "Chief Information Security Officer (Non-Technical Executive)",
+    shap: 7, lime: 3, preferred: "SHAP",
+    reason1: "SHAP provides a clean, prioritized ranking of risk factors that is highly digestible, whereas LIME overwhelms with complex mathematical inequalities that are meaningless to a business executive.",
+    reason2: "SHAP allows easy understanding and communication of the overall big-picture logic of security tools to the Board, whereas LIME's hyper-local, noisy decimal contributions are too technical and lack strategic value for high-level risk management."
+  },
+  {
+    provider: "Claude", model: "claude-sonnet-5",
+    name: "Security Operations Center (SOC) Manager",
+    shap: 5, lime: 8, preferred: "LIME",
+    reason1: "Actionable thresholds for this specific alert: LIME tells you the exact numeric ranges driving this detection, which can immediately be used to write a detection rule, validate against raw packet captures, or brief an analyst — SHAP only shows what matters globally, not what value or direction is suspicious in the case being triaged right now.",
+    reason2: "Direction of impact is explicit in LIME, ambiguous in SHAP: LIME's signed contributions let you instantly see which conditions push toward attack vs. benign, building a narrative for the incident report in seconds, while SHAP's global ranking needs extra digging for the same operational clarity."
+  },
+  {
+    provider: "Claude", model: "claude-sonnet-5",
+    name: "IT Compliance & Risk Auditor",
+    shap: 5, lime: 8, preferred: "LIME",
+    reason1: "Case-level auditability: Compliance requires justifying individual decisions/alerts, not just general model tendencies. LIME's output directly ties to the specific instance under review, giving defensible, per-case evidence, whereas SHAP's global importances cannot explain why this alert fired.",
+    reason2: "Transparency in plain language: LIME's condition-based format (value ranges + direction of contribution) is easier to translate into non-technical language for audit reports than SHAP's abstract importance scores, which require additional context to interpret direction and relevance to a specific case."
+  },
+  {
+    provider: "Claude", model: "claude-sonnet-5",
+    name: "Chief Information Security Officer (Non-Technical Executive)",
+    shap: 4, lime: 6, preferred: "LIME",
+    reason1: "LIME explains this specific alert with actual threshold values, which shows why this particular event was flagged — SHAP only shows which technical metrics matter in general across all traffic, which doesn't help judge one incident.",
+    reason2: "LIME's contributions show direction (positive/negative) toward the specific decision, building a narrative, whereas SHAP's global importance scores are abstract rankings with no narrative; both still need translation by a technical team, but LIME gets closer to a 'because X happened' explanation for the board or auditors."
+  },
+  {
+    provider: "GPT", model: "gpt-5.5",
+    name: "Security Operations Center (SOC) Manager",
+    shap: 7, lime: 8, preferred: "LIME",
+    reason1: "LIME explains the specific alert using concrete feature ranges and positive/negative contributions, which is more useful for rapid triage than global feature importance alone.",
+    reason2: "LIME provides actionable context, such as packet rates, flow duration, and packet counts for this event, helping analysts understand why this particular traffic was flagged."
+  },
+  {
+    provider: "GPT", model: "gpt-5.5",
+    name: "IT Compliance & Risk Auditor",
+    shap: 6, lime: 8, preferred: "LIME",
+    reason1: "LIME is more useful for auditing a specific alert because it shows the exact feature value ranges that influenced the decision, making the explanation easier to trace and document.",
+    reason2: "LIME shows whether each condition increased or decreased the alert score, while SHAP only provides global importance rankings without explaining the direction or the specific reason for this alert."
+  },
+  {
+    provider: "GPT", model: "gpt-5.5",
+    name: "Chief Information Security Officer (Non-Technical Executive)",
+    shap: 7, lime: 5, preferred: "SHAP",
+    reason1: "SHAP provides a clear ranked list of the main traffic factors influencing the model overall, which is easier for executive risk review than detailed threshold ranges.",
+    reason2: "LIME is more alert-specific, but the many technical ranges and positive/negative contribution values are harder to interpret without analyst support."
+  }
+];
+
+let currentResults = EMBEDDED_RESULTS;
+let currentFilter = "all";
+
+function computeStats(results) {
+  let shapTotal=0, limeTotal=0, shapN=0, limeN=0, limeWins=0, shapWins=0;
+  results.forEach(r => {
+    if (r.shap !== null && r.shap !== undefined) { shapTotal += r.shap; shapN++; }
+    if (r.lime !== null && r.lime !== undefined) { limeTotal += r.lime; limeN++; }
+    if (r.preferred === 'LIME') limeWins++;
+    else if (r.preferred === 'SHAP') shapWins++;
+  });
+  return { shapTotal, limeTotal, shapN, limeN, limeWins, shapWins };
+}
+
+function renderSummary(results) {
+  const { shapTotal, limeTotal, shapN, limeN, limeWins, shapWins } = computeStats(results);
+  const overall = limeWins === shapWins ? (limeWins ? 'Split' : '–') : (limeWins > shapWins ? 'LIME' : 'SHAP');
+  document.getElementById('summary').innerHTML = `
+    <div class="stat"><div class="k">Agents evaluated</div><div class="v">${results.length}</div></div>
+    <div class="stat"><div class="k">Avg SHAP rating</div><div class="v shap">${shapN ? (shapTotal/shapN).toFixed(1) : '–'}</div></div>
+    <div class="stat"><div class="k">Avg LIME rating</div><div class="v lime">${limeN ? (limeTotal/limeN).toFixed(1) : '–'}</div></div>
+    <div class="stat"><div class="k">Overall preferred</div><div class="v">${overall}</div></div>
+  `;
+}
+
+function cardHTML(r) {
+  const prefClass = r.preferred === 'LIME' ? 'lime' : (r.preferred === 'SHAP' ? 'shap' : 'none');
+  return `
+    <div class="card">
+      <div class="card-top">
+        <div class="persona-name">${r.name}</div>
+        <div class="preferred-tag ${prefClass}">${r.preferred ? 'Prefers ' + r.preferred : 'No preference parsed'}</div>
+      </div>
+      <div class="bars">
+        <div class="bar-row">
+          <div class="bar-label">SHAP</div>
+          <div class="bar-track"><div class="bar-fill shap" style="width:${r.shap ? r.shap*10 : 0}%"></div></div>
+          <div class="bar-score">${r.shap !== null && r.shap !== undefined ? r.shap + '/10' : '—'}</div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">LIME</div>
+          <div class="bar-track"><div class="bar-fill lime" style="width:${r.lime ? r.lime*10 : 0}%"></div></div>
+          <div class="bar-score">${r.lime !== null && r.lime !== undefined ? r.lime + '/10' : '—'}</div>
+        </div>
+      </div>
+      <div class="reasons">
+        <div class="reason"><span class="rk">Reason 1</span>${r.reason1 || '—'}</div>
+        <div class="reason"><span class="rk">Reason 2</span>${r.reason2 || '—'}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderGrouped(results, filter) {
+  const container = document.getElementById('groupedCards');
+  container.innerHTML = '';
+
+  const filtered = filter === 'all' ? results : results.filter(r => r.provider === filter);
+
+  if (!filtered.length) {
+    container.innerHTML = '<div class="empty">No results to show.</div>';
+    return;
+  }
+
+  const providers = [...new Set(filtered.map(r => r.provider))];
+  providers.forEach(providerName => {
+    const providerResults = filtered.filter(r => r.provider === providerName);
+    const model = providerResults[0]?.model || '';
+    const dotClass = providerName === 'Gemini' ? 'gemini' : (providerName === 'Claude' ? 'claude' : 'gpt');
+
+    const group = document.createElement('div');
+    group.className = 'provider-group';
+    group.innerHTML = `
+      <div class="provider-heading">
+        <span class="provider-dot ${dotClass}"></span>
+        <h2>${providerName}</h2>
+        <span class="model-tag">${model}</span>
+      </div>
+      <div class="cards">${providerResults.map(cardHTML).join('')}</div>
+    `;
+    container.appendChild(group);
+  });
+}
+
+function renderAll() {
+  renderSummary(currentResults);
+  renderGrouped(currentResults, currentFilter);
+  document.getElementById('footTime').textContent = 'loaded ' + new Date().toLocaleString();
+}
+
+// Filter buttons
+document.getElementById('filters').addEventListener('click', (e) => {
+  if (e.target.tagName !== 'BUTTON') return;
+  document.querySelectorAll('#filters .btn').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  currentFilter = e.target.dataset.filter;
+  renderGrouped(currentResults, currentFilter);
+});
+
+// -----------------------------------------------------------------------
+// Manual file loader — parses a raw multi_provider_agent_eval.txt export
+// (blocks separated by "==========================================",
+// each starting with "=== Provider: X | Persona: Y ===")
+// -----------------------------------------------------------------------
+function parseRawTxt(rawText) {
+  const blocks = rawText.split(/\n\s*={5,}\s*\n/).map(b => b.trim()).filter(Boolean);
+  const grab = (block, label, isNumber) => {
+    const re = new RegExp(label + '\\s*:?\\s*\\[?([^\\]\\n]+)\\]?', 'i');
+    const m = block.match(re);
+    if (!m) return null;
+    const val = m[1].trim();
+    return isNumber ? (parseFloat(val.match(/\d+(\.\d+)?/)?.[0]) ?? null) : val;
+  };
+  return blocks.map(block => {
+    const headerMatch = block.match(/Provider:\s*([^\|]+)\|\s*Persona:\s*([^\n=]+)/i);
+    const provider = headerMatch ? headerMatch[1].trim() : null;
+    const name = headerMatch ? headerMatch[2].trim() : grab(block, 'Persona');
+    const shap = grab(block, 'SHAP Rating \\(1-10\\)', true);
+    const lime = grab(block, 'LIME Rating \\(1-10\\)', true);
+    let preferred = grab(block, 'Preferred Method');
+    if (preferred) preferred = /LIME/i.test(preferred) ? 'LIME' : (/SHAP/i.test(preferred) ? 'SHAP' : preferred.toUpperCase());
+    const reason1 = grab(block, 'Reason 1');
+    const reason2 = grab(block, 'Reason 2');
+    if (!name && shap === null && lime === null) return null;
+    return { provider: provider || 'Unknown', model: '', name: name || 'Unknown persona', shap, lime, preferred, reason1, reason2 };
+  }).filter(Boolean);
+}
+
+document.getElementById('pickBtn').addEventListener('click', () => document.getElementById('filePicker').click());
+document.getElementById('filePicker').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    const results = parseRawTxt(evt.target.result);
+    currentResults = results;
+    currentFilter = 'all';
+    document.querySelectorAll('#filters .btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('#filters .btn[data-filter="all"]').classList.add('active');
+    document.getElementById('loaderStatus').textContent = `Loaded ${results.length} result(s) from "${file.name}".`;
+    document.getElementById('loaderStatus').className = 'loader-status good';
+    document.getElementById('footSource').textContent = 'source: ' + file.name;
+    renderAll();
+  };
+  reader.readAsText(file);
+});
+
+renderAll();
+</script>
+</body>
+</html>
