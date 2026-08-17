@@ -9,7 +9,7 @@ Compares SHAP and LIME explainability methods for a machine learning-based Intru
 
 ## Files
 
-- `notebooks/shap_lime_xai_pipeline.ipynb` - full pipeline: model training, SHAP/LIME generation, multi-agent LLM evaluation
+- `notebooks/shap_lime_pipeline.ipynb` - full pipeline: model training, SHAP/LIME generation, multi-agent LLM evaluation
 - `dashboard/index.html` - standalone results dashboard, open directly in any browser
 
 ## Key Finding
